@@ -60,8 +60,16 @@ public class InteractiveMain {
         userService = new UserService();
         authService = new AuthenticationService();
         
-        // Initialiser liste vide de serveurs
+        // Créer des serveurs par défaut
         serverList = new ArrayList<>();
+        ServerStaff server1 = new ServerStaff("alice", "Alice Dupont");
+        ServerStaff server2 = new ServerStaff("bob", "Bob Martin");
+        serverList.add(server1);
+        serverList.add(server2);
+        
+        // Créer les comptes utilisateurs pour les serveurs
+        authService.createUser("alice", "alice123", "SERVEUR", "Alice Dupont");
+        authService.createUser("bob", "bob123", "SERVEUR", "Bob Martin");
         
         serverManager = new ServerManager(serverList, orderService);
         
@@ -74,7 +82,8 @@ public class InteractiveMain {
         menu.add(new MenuItem("m5", "Tiramisu", 6.5));
         
         System.out.println("✓ Système initialisé");
-        System.out.println("✓ Admin par défaut: username=admin, password=admin123\n");
+        System.out.println("✓ Admin par défaut: username=admin, password=admin123");
+        System.out.println("✓ Serveurs créés: Alice (alice/alice123), Bob (bob/bob123)\n");
     }
 
     private static void showWelcome() {
@@ -240,8 +249,9 @@ public class InteractiveMain {
         System.out.println("          MENU SERVEUR - " + currentUser.getDisplayName());
         System.out.println("═══════════════════════════════════════════════════");
         System.out.println("1. Voir les notifications");
-        System.out.println("2. Voir état des serveurs");
-        System.out.println("3. Voir toutes les commandes");
+        System.out.println("2. Envoyer une commande à la cuisine (par numéro)");
+        System.out.println("3. Voir état des serveurs");
+        System.out.println("4. Voir toutes les commandes");
         System.out.println("0. Se déconnecter");
         System.out.println("═══════════════════════════════════════════════════");
         
@@ -253,9 +263,12 @@ public class InteractiveMain {
                 showNotifications();
                 break;
             case "2":
-                showServerStatus();
+                sendOrderToKitchen();
                 break;
             case "3":
+                showServerStatus();
+                break;
+            case "4":
                 showAllOrders();
                 break;
             case "0":
@@ -272,6 +285,21 @@ public class InteractiveMain {
         System.out.println("\n═══════════════════════════════════════════════════");
         System.out.println("          MENU CUISINE - " + currentUser.getDisplayName());
         System.out.println("═══════════════════════════════════════════════════");
+        
+        // Afficher l'état en temps réel
+        int availableCooks = kitchen.getAvailableCooksCount();
+        int totalCooks = kitchen.getTotalCooksCount();
+        int queueSize = kitchen.getQueueSize();
+        
+        System.out.println("\n🍳 État de la cuisine:");
+        System.out.println("   Cuisiniers disponibles: " + availableCooks + "/" + totalCooks);
+        if (queueSize > 0) {
+            System.out.println("   ⏳ Commandes en file d'attente: " + queueSize);
+        } else {
+            System.out.println("   ✅ Aucune commande en attente");
+        }
+        
+        System.out.println("\n═══════════════════════════════════════════════════");
         System.out.println("1. Voir commandes en préparation");
         System.out.println("2. Voir toutes les commandes");
         System.out.println("3. Statistiques cuisine");
@@ -485,6 +513,16 @@ public class InteractiveMain {
 
     private static void showServerStatus() {
         System.out.println("\n--- État des serveurs ---");
+        
+        if (serverList.isEmpty()) {
+            System.out.println("❌ Aucun serveur dans le système");
+            System.out.println("   L'admin doit créer des utilisateurs de type SERVEUR");
+            return;
+        }
+        
+        long available = serverList.stream().filter(s -> !s.isBusy()).count();
+        System.out.println("Total: " + serverList.size() + " serveur(s) | Disponibles: " + available + "\n");
+        
         serverList.forEach(s -> {
             String status = s.isBusy() ? "🔴 OCCUPÉ" : "🟢 LIBRE";
             System.out.println(s.getName() + ": " + status);
@@ -594,10 +632,84 @@ public class InteractiveMain {
             serverManager.submitOrderFromServer(currentUser.getDisplayName(), items);
             
             double total = items.stream().mapToDouble(MenuItem::getPrice).sum();
-            System.out.println("\n✓ Commande enregistrée!");
+            System.out.println("\n✓ Commande enregistrée et envoyée à la cuisine!");
             System.out.printf("Total: %.2f€%n", total);
+            
+            // Afficher l'état de la cuisine
+            int availableCooks = kitchen.getAvailableCooksCount();
+            int totalCooks = kitchen.getTotalCooksCount();
+            int queueSize = kitchen.getQueueSize();
+            
+            System.out.println("\n🍳 État de la cuisine:");
+            System.out.println("   Cuisiniers disponibles: " + availableCooks + "/" + totalCooks);
+            if (queueSize > 0) {
+                System.out.println("   ⏳ Commandes en attente: " + queueSize);
+            }
             
         } catch (Exception e) {
             System.out.println("❌ Erreur dans la sélection");
         }
-    }}
+    }
+    
+    private static void sendOrderToKitchen() {
+        System.out.println("\n═══════════════════════════════════════════════════");
+        System.out.println("       ENVOYER UNE COMMANDE À LA CUISINE");
+        System.out.println("═══════════════════════════════════════════════════");
+        
+        // Afficher toutes les commandes non encore en préparation
+        List<Order> pendingOrders = orderService.list().stream()
+            .filter(o -> o.getStatus() == Order.Status.RECEIVED)
+            .collect(Collectors.toList());
+        
+        if (pendingOrders.isEmpty()) {
+            System.out.println("\n❌ Aucune commande en attente d'envoi à la cuisine");
+            return;
+        }
+        
+        System.out.println("\n--- Commandes en attente ---");
+        for (int i = 0; i < pendingOrders.size(); i++) {
+            Order o = pendingOrders.get(i);
+            System.out.printf("\n%d. %s | Client: %s | Statut: %s%n", 
+                i + 1, o.getId(), o.getClientName(), o.getStatus());
+            o.getItems().forEach(item -> System.out.println("   • " + item.getName()));
+        }
+        
+        System.out.print("\nNuméro de la commande à envoyer (0 pour annuler): ");
+        try {
+            int choice = Integer.parseInt(scanner.nextLine());
+            
+            if (choice == 0) {
+                return;
+            }
+            
+            if (choice < 1 || choice > pendingOrders.size()) {
+                System.out.println("❌ Choix invalide");
+                return;
+            }
+            
+            Order selectedOrder = pendingOrders.get(choice - 1);
+            
+            // Afficher l'état actuel de la cuisine
+            int availableCooks = kitchen.getAvailableCooksCount();
+            int totalCooks = kitchen.getTotalCooksCount();
+            int queueSize = kitchen.getQueueSize();
+            
+            System.out.println("\n🍳 État actuel de la cuisine:");
+            System.out.println("   Cuisiniers disponibles: " + availableCooks + "/" + totalCooks);
+            
+            if (availableCooks == 0) {
+                System.out.println("\n⏳ ATTENTION: Tous les cuisiniers sont occupés!");
+                System.out.println("   La commande sera mise en file d'attente.");
+                System.out.println("   Position dans la file: " + (queueSize + 1));
+            }
+            
+            // Envoyer à la cuisine
+            kitchen.submitOrder(selectedOrder);
+            
+            System.out.println("\n✅ Commande " + selectedOrder.getId() + " envoyée à la cuisine!");
+            
+        } catch (NumberFormatException e) {
+            System.out.println("❌ Entrée invalide");
+        }
+    }
+}

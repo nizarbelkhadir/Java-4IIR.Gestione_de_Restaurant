@@ -1,11 +1,9 @@
 package com.example.restaurant.service;
 
-import com.example.restaurant.model.Order;
-import com.example.restaurant.model.ServerStaff;
 import com.example.restaurant.model.MenuItem;
+import com.example.restaurant.model.ServerStaff;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -63,8 +61,26 @@ public class ServerManager {
             System.out.println("📱 Client (self-service) " + req.clientName + " placed order directly.");
         } else {
             // Client appelle un serveur
+            
+            // Vérifier s'il y a des serveurs dans le système
+            if (servers.isEmpty()) {
+                System.out.println("❌ Aucun serveur n'est disponible dans le système.");
+                System.out.println("   Veuillez passer votre commande en SELF-SERVICE ou contacter l'admin.");
+                return;
+            }
+            
             requests.offer(req);
-            System.out.println("🔔 Client " + req.clientName + " requested a server (queued).");
+            
+            // Vérifier s'il y a des serveurs disponibles
+            long availableCount = servers.stream().filter(s -> !s.isBusy()).count();
+            
+            if (availableCount > 0) {
+                System.out.println("🔔 Client " + req.clientName + " a demandé un serveur.");
+                System.out.println("✅ Serveur disponible! Un serveur va venir prendre votre commande...");
+            } else {
+                System.out.println("🔔 Client " + req.clientName + " a demandé un serveur.");
+                System.out.println("⏳ Tous les " + servers.size() + " serveurs sont occupés. Vous êtes en file d'attente (position " + requests.size() + ")");
+            }
         }
     }
 
@@ -97,7 +113,7 @@ public class ServerManager {
                 serverNotifications.get(server.getName()).add(notif);
                 serverCurrentRequest.put(server.getName(), req);
                 
-                System.out.println("🔔 " + notif.getMessage());
+                System.out.println("� NOTIFICATION envoyée à " + server.getName() + ": " + notif.getMessage());
                 
                 // Lambda pour créer le Runnable
                 serverExecutor.submit(() -> handleWithServer(server, req));

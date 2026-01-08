@@ -1,62 +1,49 @@
 package com.example.restaurant.service;
 
-import com.example.restaurant.model.*;
-import com.example.restaurant.storage.JsonStorage;
+import com.example.restaurant.storage.DatabaseStorage;
 
-import java.io.File;
 import java.util.*;
 
 /**
  * Service d'authentification et gestion des credentials
+ * MISE À JOUR: Utilise MySQL via JDBC au lieu de fichiers JSON
  */
 public class AuthenticationService {
-    private static final String USERS_FILE = "users.json";
     private Map<String, UserCredential> credentials;
     private UserCredential currentUser;
     
     public AuthenticationService() {
         credentials = new HashMap<>();
+        // Tester la connexion à la base de données
+        if (!DatabaseStorage.testConnection()) {
+            System.err.println("ERREUR: Impossible de se connecter à la base de données MySQL!");
+            System.err.println("Assurez-vous que XAMPP est démarré et que la base 'restaurant_db' existe.");
+        }
+        // Initialiser les tables et charger les credentials
+        DatabaseStorage.initializeTables();
         loadCredentials();
-        initializeDefaultAdmin();
     }
     
     /**
-     * Charge les credentials depuis le fichier JSON
+     * Charge les credentials depuis la base de données MySQL
      */
     private void loadCredentials() {
-        File file = new File(USERS_FILE);
-        if (file.exists()) {
-            List<UserCredential> list = JsonStorage.readUserCredentials(file);
-            for (UserCredential cred : list) {
-                credentials.put(cred.getUsername(), cred);
-            }
+        List<UserCredential> list = DatabaseStorage.readUserCredentials();
+        credentials.clear();
+        for (UserCredential cred : list) {
+            credentials.put(cred.getUsername(), cred);
+        }
+        
+        if (credentials.isEmpty()) {
+            System.out.println("Aucun utilisateur trouvé. Les données par défaut devraient être dans la base de données.");
         }
     }
     
     /**
-     * Sauvegarde les credentials dans le fichier JSON
+     * Rafraîchir les credentials depuis la base de données
      */
-    private void saveCredentials() {
-        File file = new File(USERS_FILE);
-        List<UserCredential> list = new ArrayList<>(credentials.values());
-        JsonStorage.writeUserCredentials(file, list);
-    }
-    
-    /**
-     * Initialise l'admin par défaut si n'existe pas
-     */
-    private void initializeDefaultAdmin() {
-        if (!credentials.containsKey("admin")) {
-            UserCredential admin = new UserCredential(
-                "admin",
-                "admin123",
-                "ADMIN",
-                "Admin",
-                "ADM-001"
-            );
-            credentials.put("admin", admin);
-            saveCredentials();
-        }
+    public void refreshCredentials() {
+        loadCredentials();
     }
     
     /**
@@ -125,9 +112,12 @@ public class AuthenticationService {
             userId
         );
         
-        credentials.put(username, newUser);
-        saveCredentials();
-        return true;
+        // Sauvegarder dans la base de données
+        if (DatabaseStorage.addUserCredential(newUser)) {
+            credentials.put(username, newUser);
+            return true;
+        }
+        return false;
     }
     
     /**
@@ -142,9 +132,12 @@ public class AuthenticationService {
             return false; // Ne peut pas supprimer l'admin
         }
         
-        credentials.remove(username);
-        saveCredentials();
-        return true;
+        // Supprimer de la base de données
+        if (DatabaseStorage.deleteUserCredential(username)) {
+            credentials.remove(username);
+            return true;
+        }
+        return false;
     }
     
     /**

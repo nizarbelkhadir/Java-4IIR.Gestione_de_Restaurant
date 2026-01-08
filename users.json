@@ -1,5 +1,5 @@
 [
   {"username":"admin","password":"admin123","userType":"ADMIN","displayName":"Admin","userId":"ADM-001"},
-  {"username":"Mounir","password":"1234","userType":"SERVEUR","displayName":"Mounir Hajoui","userId":"SRV-765d4e4c"}
-
+  {"username":"Mounir","password":"1234","userType":"SERVEUR","displayName":"Mounir Hajoui","userId":"SRV-765d4e4c"},
+  {"username":"abdljabar","password":"123","userType":"CUISINIER","displayName":"abdeljabarTABAKH","userId":"KIT-2241a270"}
 ]
